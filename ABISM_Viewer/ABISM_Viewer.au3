@@ -3,7 +3,7 @@
 #AutoIt3Wrapper_UseUpx=n
 #AutoIt3Wrapper_UseX64=n
 #AutoIt3Wrapper_Res_Description=ABISM Viewer
-#AutoIt3Wrapper_Res_Fileversion=2.0.0.7
+#AutoIt3Wrapper_Res_Fileversion=2.0.0.8
 #AutoIt3Wrapper_Res_Fileversion_AutoIncrement=y
 #AutoIt3Wrapper_Res_LegalCopyright=Crashdemons
 #EndRegion ;**** Directives created by AutoIt3Wrapper_GUI ****
@@ -101,9 +101,8 @@ While 1
 WEnd
 
 Func ConfigUpdated()
-	;WinActivate($Form2)
-	;WinActivate($Form1)
 	GUISwitch($Form1)
+	WinActivate($Form1)
 	ClickClear()
 	UpdateBits()
 EndFunc
