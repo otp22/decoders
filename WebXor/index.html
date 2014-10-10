@@ -1,0 +1,218 @@
+<!doctype html>
+<html>
+<head>
+<title>WebXor Autodecoder v1.1</title>
+<style>
+.monospace{
+	font-family: "Courier New", "Lucida Console", Courier, monospace, Monaco;
+}
+body{background-color: black; color:#FFFFFF;}
+textarea{ width: 500px; height: 250px; background-color: #1F1F1F; color:#00FF00;}
+input{ background-color: #1F1F1F; color:#00FF00;}
+</style>
+<script src="jquery-1.11.1.min.js"></script>
+<script type="text/javascript">
+var xorblock=new Array();
+var transchanged=0;
+var offsetchanged=0;
+
+function int2signedstr(n)
+{
+	if(n<=0) return n;
+	return "+"+n;
+}
+function isByte(s){
+	var intRegex = /^\d+$/;
+	return intRegex.test(s);
+}
+function isReadable(a){
+	return ( (a>=0x20 && a<=0x7E) || a==0x0d || a==0x0a || a==0x09 );
+}
+function isGraphable(a){
+	return ( isReadable(a) || (a>=0xA0 && a<=0xFF));
+}
+
+function warning_set(s){
+	document.getElementById("warnings").value=s;
+}
+function warning_append(s){
+	document.getElementById("warnings").value+=s+"\n";
+}
+
+function warning_bytetrace(arr,i)
+{
+	var min=i-5;
+	var out="";
+	if(min>0) out="... ";
+	for(var j=(min<0)?0:min;j<i;j++){//loop from the lowest index (up to 5 below) to just before the indicated index.
+		out+=arr[j]+" ";
+	}
+	var disp=out+arr[i];
+	if((i+1)<arr.length) disp+=" ...";
+	warning_append(disp);//output the byte sequence up-to and including the indicated index.
+	warning_append(strrepeat("-",out.length)+"^");//print the -------^ indicator
+}
+function decode_set(s){
+	document.getElementById("decode").value=s;
+}
+function decode_append(s){
+	document.getElementById("decode").value+=s;
+}
+function strrepeat(s,n){
+	return Array(n+1).join(s);
+}
+function autocorrect_countreadable(keyarr,msgarr,iStart,delta)//given an alignment offset delta, count the number readable (graphable ANSI) characters
+{
+	var bound=keyarr.length<msgarr.length?keyarr.length:msgarr.length; //(smallest bound)
+	var readable=0;
+	for(var i=iStart;i<bound;i++){
+		var asc1=parseInt(msgarr[i],10);
+		var asc2=parseInt(keyarr[i+delta],10);
+		if(isReadable(asc1^asc2)) readable++;
+	}
+	return readable;
+}
+function autocorrect_suggest(tolerance,keyarr,msgarr,iStart,olddelta)//for a starting position in an encoded message, suggest a new offset delta that will provide more readable (graphable ANSI) characters.
+{
+	var suggestedDelta=olddelta;
+	var suggestedCount=0;
+	for(var delta=olddelta-tolerance;delta<=(olddelta+tolerance);delta++){
+		var count=autocorrect_countreadable(keyarr,msgarr,iStart,delta);
+		if(count>suggestedCount){
+			suggestedCount=count;
+			suggestedDelta=delta;
+		}
+	}
+	return suggestedDelta;
+}
+function trans_update(){
+	transchanged=0;
+	warning_set("");
+	decode_set("");
+	var tolerance=parseInt(document.getElementById("tolerance").value,10);
+	var offset=document.getElementById("offset").value;
+	var trans=document.getElementById("transcription").value.replace(/\s+/g, ' ');
+	var doAutocorrect = document.getElementById("autocorrect").checked;
+
+	if(offset==""){ warning_append("Error: No offset has been entered - Please finish transcribing then enter a keyfile offset position."); return; }
+
+
+	var bytes=trans.split(" ");
+	//console.log("KEY "+xorblock.length+", MSG "+bytes.length);
+	var num=bytes.length;
+	var offset_correction=0;
+	if(xorblock.length<1){ warning_append("Error: Could not load XOR key block. Verify offset."); return; }
+	if(xorblock.length<bytes.length){ warning_append("Warning: XOR key block shorter than message - Some data will not be decoded. Verify offset.");  num=xorblock.length;}
+	var out=63;
+	for(var i=0;i<num;i++){
+		if(bytes[i]=="") continue;
+		var asc=parseInt(bytes[i],10);
+		var xor=parseInt(xorblock[i+offset_correction],10);
+		if(isNaN(asc) || !isByte(bytes[i])){
+			warning_append("Error: Non-numerical value at message index "+i);
+			warning_bytetrace(bytes,i);
+			return;
+
+		}else if(asc<0 || asc>255){
+			warning_append("Error: Byte value out of range at message index "+i);
+			warning_bytetrace(bytes,i);
+			return;
+		}else{
+			out=asc^xor;
+		}
+
+		if(!isReadable(out)){
+			warning_append("Warning: Resulting byte value is not graphable ANSI at message index "+i);
+			warning_bytetrace(bytes,i);
+			var newdelta=autocorrect_suggest(tolerance,xorblock,bytes,i,offset_correction);
+			if(newdelta!=offset_correction){
+				var difference=newdelta-offset_correction;
+				var descriptor="missing";
+				if(difference<0) descriptor="extraneous";
+				var message = "Information: Possibly "+Math.abs(difference)+" "+descriptor+ " bytes near message index "+i;
+				if(doAutocorrect){
+					message+=" - Autocorrected.";
+					offset_correction=newdelta;
+					xor=parseInt(xorblock[i+offset_correction],10);
+					out=asc^xor;
+				}
+				warning_append(message);
+			}
+
+
+
+
+
+
+		}
+
+		if(isGraphable(out)){ decode_append(String.fromCharCode(out));}else{ decode_append("."); }
+
+
+	}
+}
+
+
+function offset_update(){
+	offsetchanged=0;
+	transchanged=0;//prevent decode from being refreshed more than once.
+
+	var offset=document.getElementById("offset").value;
+
+	if(offset==""){
+		trans_change();
+	}else{
+		$.ajax({
+			url: "http://mirror.otp22.com/xor/block.php?offset="+offset,
+			dataType: "script",
+			success: trans_change
+		});
+	}
+	//load new block
+	//redo transcription.
+}
+
+function trans_change()
+{
+	transchanged=1;
+}
+function offset_change()
+{
+	offsetchanged=1;
+}
+function formUpdateTick(){
+	if(offsetchanged==1){
+		offset_update();
+	}else if(transchanged==1){
+		trans_update();
+	}
+}
+function xorinit(){
+	offset_change();
+	setInterval(formUpdateTick,250);
+}
+
+</script>
+</head>
+
+
+
+
+<body class="monospace" onload="xorinit()">
+<form action="#" id="xorform">
+Keyfile: <input type="text" id="keyfile" value="elpaso_blackotp1" readonly><!-- not used currently --><br>
+<textarea id="transcription" onchange="trans_change()" onkeydown="trans_change()" oninput="trans_change()" wrap="hard" placeholder="Enter your decimal byte message to be XOR'd against the keyfile at the offset position"></textarea>
+<textarea id="decode" style="color:#7F7F7F;" wrap="off" readonly placeholder="Decoded data pane"></textarea><br>
+Offset: <input type="number" id="offset" onchange="offset_change()" onkeydown="offset_change()" oninput="offset_change()" maxlength="9" min="0" max="999999999" value="">&nbsp;|&nbsp;
+<input onchange="trans_change()" type="checkbox" id="autocorrect" value="yes" checked>Autocorrect&nbsp;|&nbsp;
+Tolerance: <input onchange="trans_change()" type="number" id="tolerance" value="2" min="1" max="5" maxlength="1"> bytes
+<hr>
+Warnings:<br>
+<textarea id="warnings" style="color:#FF0000; width:1000px; height:500px;" wrap="off" readonly placeholder="No Warnings"></textarea>
+</form>
+<hr>
+<span style="color:#1F1F1F">Made by Crashdemons with helpful input from sashah and TCN/Echoshock</span>
+
+</body>
+
+</html>
