@@ -10,6 +10,7 @@ body{background-color: black; color:#FFFFFF;}
 textarea{ width: 500px; height: 250px; background-color: #1F1F1F; color:#00FF00;}
 input{ background-color: #1F1F1F; color:#00FF00;}
 </style>
+<script src="base64.js"></script>
 <script src="jquery-1.11.1.min.js"></script>
 <script type="text/javascript">
 var xorblock=new Array();
@@ -84,6 +85,9 @@ function autocorrect_suggest(tolerance,keyarr,msgarr,iStart,olddelta)//for a sta
 		}
 	}
 	return suggestedDelta;
+}
+function decode(msgbytes,keybytes,doAutocorrect,nAutocorrectTolerance){
+
 }
 function trans_update(){
 	transchanged=0;
